@@ -230,6 +230,14 @@
         .catch(err => console.log('PWA登録失敗:', err));
     });
     }
+
+  // 画面のどこかをタップしたら、強制的にスマホの通知バーも含めて全画面（フルスクリーン）にする
+  document.body.addEventListener("click", () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen()
+        .catch(err => console.log("全画面モードエラー:", err));
+    }
+  });
 </script>
 
 </body>
