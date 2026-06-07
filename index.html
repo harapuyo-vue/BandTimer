@@ -76,6 +76,7 @@
       margin-top: 2em;
     }
   </style>
+  <a href="https://live-timetable.kameim.us/" class="mt-4 inline-block text-blue-300 hover:text-blue-200 underline"> タイムテーブルへ戻る </a>
 </head>
 <body>
 
@@ -103,7 +104,7 @@
     // -----------------------------------------------------------------
     // ⚠️ ここにGASで「新しいデプロイ」をしたときに発行されたURLを貼り付けてください
     // -----------------------------------------------------------------
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbwECjbOunGWAsX6HAZsr-8xlvTLn5FVLcDkmJrFrv92I0xvmRDoyKzONah0vPs14Cj8WQ/exec";
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwECjbOunGWAsX6HAZsr-8xlvTLn5FVLcDkmJrFrv92I0xvmRDoyKzONah0vPs14Cj8WQ/exechttps://script.google.com/macros/s/AKfycbxELNQn9rzglTP0zgyfFF9MidNciV7MCxLB8W5sgrmrFOyibW32QDw3Ii3Z8Lr4l82ovg/exec";
 
     let speakers = []; // スプレッドシートから取得したデータが入る配列
     let currentIndex = 0;
@@ -217,7 +218,7 @@
       loadSpeaker();
     });
 
-    // 最初の一歩：データをスプレッドシートに取りに行く
+    // データをスプレッドシートに取りに行く
     fetchTimeTable();
     // サービスワーカー（sw.js）の登録
     if ('serviceWorker' in navigator) {
