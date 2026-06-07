@@ -130,14 +130,14 @@
         
         // GASから届いた [ [終了時間, バンド名], [...] ] の配列を整形
         // ※1行目がヘッダー（Time, Band）の場合はスライスで飛ばす
-        const startRow = (data[0][0] === "Time" || data[0][0] === "時間") ? 1 : 0;
+        const startRow = (data[0][0] === "Time" || data[0][0] === "終了時刻") ? 1 : 0;
         
         speakers = [];
         for (let i = startRow; i < data.length; i++) {
           if (data[i][0] && data[i][1]) { // 空白行は除外
             speakers.push({
               end: String(data[i][0]).trim(),  // 例: "13:30"
-              name: String(data[i][1]).trim()  // 例: "Home Run"
+              name: String(data[i][1]).trim()  // 例: "deep purple"
             });
           }
         }
