@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>残時間タイマー</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0a84ff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: #111;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      margin: 0;
+      padding: 2em;
+      line-height: 0.8;
+    }
+
+    #timer {
+      font-size: 18rem;
+      font-weight: bold;
+      margin: 0;
+    }
+
+    #speaker {
+      font-size: 1.5rem;
+      margin-bottom: 0.5em;
+    }
+
+    button, input {
+      background: #0a84ff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.5em;
+      font-size: 0.8rem;
+      color: white;
+      cursor: pointer;
+      margin: 0.8em;
+    }
+
+    button:hover {
+      background: #0066cc;
+    }
+
+    input[type="number"] {
+      background: #222;
+      color: #fff;
+      border: 1px solid #555;
+      width: 5em;
+    }
+
+    #controls {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #log {
+      margin-top: 1em;
+      white-space: pre-wrap;
+      font-size: 0.8rem;
+      background: #222;
+      padding: 1em;
+      border-radius: 8px;
+      max-width: 90%;
+    }
+    
+    /* 読み込み中メッセージ用のスタイル */
+    #loading {
+      font-size: 1.5rem;
+      color: #0a84ff;
+      margin-top: 2em;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="loading">タイムテーブルを読み込み中...</div>
+
+  <div id="mainContent" style="display: none; text-align: center;">
+    <div id="speaker"></div>
+    <div id="timer">00:00</div>
+
+    <div id="controls">
+      <br><br>	
+      <button id="nextBtn">▶ 次のバンドへ</button>
+      <br>
+      <div>
+        <label for="offsetInput">オフセット(分):</label>
+        <input type="number" id="offsetInput" value="0">
+        <button id="applyOffsetBtn">全バンドに適用</button>
+      </div>
+    </div>
+
+    <div id="log" style="display:block;"></div>
+  </div>
+
+  <script>
+    // -----------------------------------------------------------------
+    // ⚠️ ここにGASで「新しいデプロイ」をしたときに発行されたURLを貼り付けてください
+    // -----------------------------------------------------------------
+    const GAS_URL = "https://script.google.com/macros/library/d/14MSiI53Xg5tHCOMwGC5Fs8C1Tpcq3SERnLEx2fQb_IoNmWUDD8dfZbwS/1";
+
+    let speakers = []; // スプレッドシートから取得したデータが入る配列
+    let currentIndex = 0;
+    let timerInterval;
+    let offsetMinutes = 0;
+    const logs = [];
+
+    const loadingEl = document.getElementById("loading");
+    const mainContentEl = document.getElementById("mainContent");
+    const speakerEl = document.getElementById("speaker");
+    const timerEl = document.getElementById("timer");
+    const nextBtn = document.getElementById("nextBtn");
+    const offsetInput = document.getElementById("offsetInput");
+    const applyOffsetBtn = document.getElementById("applyOffsetBtn");
+    const logEl = document.getElementById("log");
+
+    // GAS（スプレッドシート）からデータを取得する関数
+    async function fetchTimeTable() {
+      try {
+        const response = await fetch(GAS_URL);
+        if (!response.ok) throw new Error("ネットワークエラー");
+        
+        const data = await response.json();
+        
+        // GASから届いた [ [終了時間, バンド名], [...] ] の配列を整形
+        // ※1行目がヘッダー（Time, Band）の場合はスライスで飛ばす
+        const startRow = (data[0][0] === "Time" || data[0][0] === "時間") ? 1 : 0;
+        
+        speakers = [];
+        for (let i = startRow; i < data.length; i++) {
+          if (data[i][0] && data[i][1]) { // 空白行は除外
+            speakers.push({
+              end: String(data[i][0]).trim(),  // 例: "13:30"
+              name: String(data[i][1]).trim()  // 例: "Home Run"
+            });
+          }
+        }
+
+        if (speakers.length === 0) throw new Error("データが空です");
+
+        // 電波が切れたときのためにスマホのローカルストレージにバックアップ
+        localStorage.setItem("cached_speakers", JSON.stringify(speakers));
+        
+        startTimerApp();
+
+      } catch (error) {
+        console.error("データ取得失敗、キャッシュを確認します:", error);
+        
+        // 万が一、電波が悪くてGASに繋がらなかった場合は、過去のキャッシュを読み込む
+        const cached = localStorage.getItem("cached_speakers");
+        if (cached) {
+          speakers = JSON.parse(cached);
+          alert("電波不良のため、前回読み込んだタイムテーブルで起動します。");
+          startTimerApp();
+        } else {
+          loadingEl.textContent = "タイムテーブルの取得に失敗しました。電波の良い場所で再読み込みしてください。";
+        }
+      }
+    }
+
+    // アプリの起動処理
+    function startTimerApp() {
+      loadingEl.style.display = "none";
+      mainContentEl.style.display = "block";
+      loadSpeaker();
+    }
+
+    function updateTimer() {
+      if (speakers.length === 0) return;
+      
+      const now = new Date();
+      const [h, m] = speakers[currentIndex].end.split(":");
+      const endTime = new Date();
+      endTime.setHours(h, m, 0, 0);
+      endTime.setMinutes(endTime.getMinutes() + offsetMinutes);
+
+      const diff = endTime - now;
+      const minutes = Math.floor(Math.abs(diff) / 1000 / 60);
+      const seconds = Math.floor((Math.abs(diff) / 1000) % 60);
+      const timeStr = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+
+      if (diff < 0) {
+        timerEl.textContent = `-${timeStr}`;
+        timerEl.style.color = "#ff5b50";
+      } else {
+        timerEl.textContent = timeStr;
+        timerEl.style.color = minutes < 5 ? "#ffdd00" : "#00ffcc";
+      }
+    }
+
+    function loadSpeaker() {
+      clearInterval(timerInterval);
+      if (speakers.length === 0) return;
+      
+      const s = speakers[currentIndex];
+      speakerEl.textContent = s.name;
+      updateTimer();
+      timerInterval = setInterval(updateTimer, 1000);
+    }
+
+    nextBtn.addEventListener("click", () => {
+      const timestamp = new Date().toLocaleTimeString();
+      logs.push(`${speakerEl.textContent}から「次のスピーカーへ」Click ${timestamp} `);
+      currentIndex = (currentIndex + 1) % speakers.length;
+      loadSpeaker();
+      logEl.textContent = logs.join("\n");      
+    });
+
+    applyOffsetBtn.addEventListener("click", () => {
+      offsetMinutes = parseInt(offsetInput.value) || 0;
+      loadSpeaker();
+    });
+
+    // 最初の一歩：データをスプレッドシートに取りに行く
+    fetchTimeTable();
+    // サービスワーカー（sw.js）の登録
+    if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('PWA準備完了:', reg.scope))
+        .catch(err => console.log('PWA登録失敗:', err));
+    });
+    }
+</script>
+
+</body>
+</html>
